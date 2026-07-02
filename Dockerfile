@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# 🔥 FORZAR INSTALACIÓN SIN DEPENDENCIAS ROTAS
+RUN R -e "install.packages('leaflet', repos='https://cloud.r-project.org')"
+
 RUN R -e "options(repos = c(CRAN = 'https://cloud.r-project.org')); \
   install.packages(c( \
     'shiny', \
