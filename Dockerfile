@@ -10,18 +10,7 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN R -e "install.packages(c(
-  'shiny',
-  'dplyr',
-  'DT',
-  'leaflet',
-  'plotly',
-  'lubridate',
-  'scales',
-  'shinydashboard',
-  'shinyWidgets',
-  'tidyr'
-), repos='https://cloud.r-project.org')"
+RUN R -e "install.packages(c('shiny','dplyr','DT','leaflet','plotly','lubridate','scales','shinydashboard','shinyWidgets','tidyr'), repos='https://cloud.r-project.org')"
 
 COPY . /srv/shiny-server/
 
