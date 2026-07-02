@@ -1,8 +1,5 @@
 FROM rocker/shiny:latest
 
-# =========================
-# SISTEMA (dependencias R spatial + gráficos)
-# =========================
 RUN apt-get update && apt-get install -y \
     libudunits2-dev \
     libgdal-dev \
@@ -18,9 +15,6 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# =========================
-# PAQUETES R (modo producción)
-# =========================
 RUN R -e "options(repos = c(CRAN = 'https://cloud.r-project.org')); \
   install.packages(c( \
     'shiny', \
@@ -35,15 +29,9 @@ RUN R -e "options(repos = c(CRAN = 'https://cloud.r-project.org')); \
     'lubridate' \
   ), dependencies = TRUE)"
 
-# =========================
-# APP
-# =========================
 COPY . /srv/shiny-server/
 WORKDIR /srv/shiny-server/
 
 EXPOSE 3838
 
-# =========================
-# START APP
-# =========================
-CMD ["R", "-e", "shiny::runApp('.', host='0.0.0.0', port=3838)"]
+CMD ["R", "-e", "shiny::runApp('.', host='0.0.0.0', port=as.numeric(Sys.getenv('PORT', 3838)))"]
