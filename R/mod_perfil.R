@@ -430,7 +430,7 @@ mod_perfil_server <- function(id) {
         tipo = input$filtro_tipo,
         anio = input$filtro_anio
       )
-      HTML(titulo_badge("TENDENCIA ESTACIONAL Y ACUMULACIÓN DE CASOS", filtros))
+      HTML(titulo_badge("TENDENCIA ESTACIONAL Y CASOS ACUMULADOS", filtros))
     })
     
     validar_datos <- function(d, mensaje = "No hay registros disponibles para los filtros seleccionados. Intenta ampliar el rango de búsqueda.") {

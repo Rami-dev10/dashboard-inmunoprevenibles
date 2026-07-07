@@ -1,7 +1,7 @@
 # ============================================================
 # MÓDULO: DATOS (PESTAÑA 4)
 # OIIS - Oficina de Inteligencia e Información en Salud
-# VERSIÓN FINAL v6 - Selectores con "TODOS" estandarizados
+# VERSIÓN FINAL v7 - Validaciones robustas
 # ============================================================
 
 # ==========================================
@@ -42,7 +42,6 @@ mod_datos_ui <- function(id) {
                       `select-all-text` = "Seleccionar todas",
                       `deselect-all-text` = "Ninguna",
                       `count-selected-text` = "{0} columnas",
-                      # 🔥 AGREGAR OPCIÓN "TODOS"
                       `selected-text-format` = "count > 3"
                     ),
                     width = "100%")
@@ -103,7 +102,6 @@ mod_datos_ui <- function(id) {
                       `select-all-text` = "Seleccionar todas",
                       `deselect-all-text` = "Ninguna",
                       `count-selected-text` = "{0} columnas",
-                      # 🔥 AGREGAR OPCIÓN "TODOS"
                       `selected-text-format` = "count > 3"
                     ),
                     width = "100%")
@@ -176,16 +174,56 @@ mod_datos_server <- function(id) {
     # ==========================================
     procesar_seleccion <- function(seleccion, lista_completa) {
       if(length(seleccion) == 0) return(lista_completa)
-      # Si el usuario seleccionó todas las columnas, devolver todas
       if(length(seleccion) == length(lista_completa)) return(lista_completa)
       return(seleccion)
     }
     
     # ==========================================
-    # DATOS DE CASOS
+    # DATOS DE CASOS CON VALIDACIONES ROBUSTAS
     # ==========================================
     datos_casos <- reactive({
       d <- casos
+      
+      # 🔥 VALIDACIÓN 1: Si no hay datos
+      if(is.null(d) || nrow(d) == 0) {
+        return(data.frame(
+          MENSAJE = "⚠️ No hay datos disponibles. Verifica la carga del archivo PRINCIPAL.csv",
+          stringsAsFactors = FALSE
+        ))
+      }
+      
+      # 🔥 VALIDACIÓN 2: Verificar columnas necesarias
+      columnas_necesarias <- c("id_caso", "diagnostico", "tipo_de_caso", "edad", "sexo", 
+                               "fecha_de_inicio", "cie", "redes", "region", "provincia", 
+                               "distrito", "grupos_de_edad", "curso_de_vida", "sem_epi", 
+                               "mes", "ano")
+      
+      columnas_faltantes <- columnas_necesarias[!columnas_necesarias %in% names(d)]
+      
+      if(length(columnas_faltantes) > 0) {
+        warning("⚠️ Columnas faltantes en casos: ", paste(columnas_faltantes, collapse = ", "))
+        
+        # Crear un dataframe con las columnas que existen
+        d_out <- data.frame(stringsAsFactors = FALSE)
+        
+        for(col in columnas_necesarias) {
+          if(col %in% names(d)) {
+            d_out[[col]] <- d[[col]]
+          } else {
+            d_out[[col]] <- rep(NA, nrow(d))
+          }
+        }
+        
+        # Renombrar para mostrar en mayúsculas
+        names(d_out) <- toupper(names(d_out))
+        
+        # Agregar columna de advertencia
+        d_out$ADVERTENCIA <- paste("Columna faltante:", paste(columnas_faltantes, collapse = ", "))
+        
+        return(d_out)
+      }
+      
+      # 🔥 CREAR DATAFRAME CON TODAS LAS COLUMNAS
       d_out <- data.frame(
         ID_CASO = d$id_caso,
         DIAGNOSTICO = d$diagnostico,
@@ -206,6 +244,7 @@ mod_datos_server <- function(id) {
         stringsAsFactors = FALSE
       )
       
+      # Fecha de defunción (opcional)
       if("fecha_defuncion" %in% names(d)) {
         d_out$FECHA_DEFUNCION <- sapply(d$fecha_defuncion, function(x) {
           if (is.na(x) || is.null(x) || as.character(x) == "" || as.character(x) == "NA") return("")
@@ -219,11 +258,14 @@ mod_datos_server <- function(id) {
     })
     
     # ==========================================
-    # DATOS DE TIA
+    # DATOS DE TIA CON VALIDACIONES
     # ==========================================
     datos_tia <- reactive({
       if(is.null(tabla_tia) || nrow(tabla_tia) == 0) {
-        return(data.frame(MENSAJE = "No hay datos de TIA disponibles", stringsAsFactors = FALSE))
+        return(data.frame(
+          MENSAJE = "⚠️ No hay datos de TIA disponibles. Verifica la carga del archivo TIA.csv",
+          stringsAsFactors = FALSE
+        ))
       }
       d <- tabla_tia
       names(d) <- toupper(names(d))
@@ -234,24 +276,27 @@ mod_datos_server <- function(id) {
     # ACTUALIZAR SELECTORES DE COLUMNAS CON "TODOS"
     # ==========================================
     observe({
-      cols_casos <- names(datos_casos())
+      d_casos <- datos_casos()
       
-      # 🔥 Crear opciones con "TODOS" como primera opción
-      opciones_casos <- c("TODOS" = "todos", cols_casos)
+      # Verificar que no sea el dataframe de error
+      if(!("MENSAJE" %in% names(d_casos)) && !("ADVERTENCIA" %in% names(d_casos))) {
+        cols_casos <- names(d_casos)
+        opciones_casos <- c("TODOS" = "todos", cols_casos)
+        
+        updatePickerInput(session, "columnas_casos",
+          choices = opciones_casos,
+          selected = "todos"
+        )
+      }
       
-      updatePickerInput(session, "columnas_casos",
-        choices = opciones_casos,
-        selected = "todos"  # 🔥 Seleccionar "TODOS" por defecto
-      )
-      
-      if(!is.null(tabla_tia) && nrow(tabla_tia) > 0) {
-        cols_tia <- names(datos_tia())
-        # 🔥 Crear opciones con "TODOS" como primera opción
+      d_tia <- datos_tia()
+      if(!("MENSAJE" %in% names(d_tia))) {
+        cols_tia <- names(d_tia)
         opciones_tia <- c("TODOS" = "todos", cols_tia)
         
         updatePickerInput(session, "columnas_tia",
           choices = opciones_tia,
-          selected = "todos"  # 🔥 Seleccionar "TODOS" por defecto
+          selected = "todos"
         )
       }
     })
@@ -262,14 +307,17 @@ mod_datos_server <- function(id) {
     datos_casos_filtrados <- reactive({
       d <- datos_casos()
       
-      # 🔥 PROCESAR SELECCIÓN CON "TODOS"
+      # Si es un dataframe de error, devolverlo tal cual
+      if("MENSAJE" %in% names(d) || "ADVERTENCIA" %in% names(d)) {
+        return(d)
+      }
+      
       if(length(input$columnas_casos) > 0 && !("todos" %in% input$columnas_casos)) {
         cols_presentes <- intersect(input$columnas_casos, names(d))
         if(length(cols_presentes) > 0) {
           d <- d[, cols_presentes, drop = FALSE]
         }
       }
-      # Si "todos" está seleccionado o no hay selección, mostrar todas las columnas
       return(d)
     })
     
@@ -279,14 +327,17 @@ mod_datos_server <- function(id) {
     datos_tia_filtrados <- reactive({
       d <- datos_tia()
       
-      # 🔥 PROCESAR SELECCIÓN CON "TODOS"
-      if(length(input$columnas_tia) > 0 && !("todos" %in% input$columnas_tia) && !grepl("MENSAJE", names(d)[1])) {
+      # Si es un dataframe de error, devolverlo tal cual
+      if("MENSAJE" %in% names(d)) {
+        return(d)
+      }
+      
+      if(length(input$columnas_tia) > 0 && !("todos" %in% input$columnas_tia)) {
         cols_presentes <- intersect(input$columnas_tia, names(d))
         if(length(cols_presentes) > 0) {
           d <- d[, cols_presentes, drop = FALSE]
         }
       }
-      # Si "todos" está seleccionado o no hay selección, mostrar todas las columnas
       return(d)
     })
     
@@ -295,6 +346,22 @@ mod_datos_server <- function(id) {
     # ==========================================
     output$tabla_casos <- DT::renderDataTable({
       d <- datos_casos_filtrados()
+      
+      # Si es un dataframe de error, mostrarlo con estilo
+      if("MENSAJE" %in% names(d) || "ADVERTENCIA" %in% names(d)) {
+        return(DT::datatable(d,
+          options = list(
+            dom = "t",
+            language = list(info = "", emptyTable = ""),
+            columnDefs = list(
+              list(className = "dt-center", targets = "_all")
+            )
+          ),
+          rownames = FALSE,
+          class = 'cell-border stripe compact',
+          escape = FALSE
+        ))
+      }
       
       DT::datatable(d,
         filter = "top",
@@ -329,6 +396,22 @@ mod_datos_server <- function(id) {
     # ==========================================
     output$tabla_tia <- DT::renderDataTable({
       d <- datos_tia_filtrados()
+      
+      # Si es un dataframe de error, mostrarlo con estilo
+      if("MENSAJE" %in% names(d)) {
+        return(DT::datatable(d,
+          options = list(
+            dom = "t",
+            language = list(info = "", emptyTable = ""),
+            columnDefs = list(
+              list(className = "dt-center", targets = "_all")
+            )
+          ),
+          rownames = FALSE,
+          class = 'cell-border stripe compact',
+          escape = FALSE
+        ))
+      }
       
       DT::datatable(d,
         filter = "top",

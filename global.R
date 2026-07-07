@@ -60,8 +60,8 @@ clean_tia_column_names <- function(df) {
     "HEPATITIS B_TIA" = "hepatitis_b_tia",
     "PARALISIS FLACIDA AGUDA" = "paralisis_flacida",
     "PARALISIS FLACIDA AGUDA_TIA" = "paralisis_flacida_tia",
-    "PAROTIDITIS" = "parotiditis",
-    "PAROTIDITIS_TIA" = "parotiditis_tia",
+    "PAROTIDITIS SIN COMPLICACIONES" = "parotiditis_sin_complicaciones",
+    "PAROTIDITIS SIN COMPLICACIONES_TIA" = "parotiditis_sin_complicaciones_tia",
     "PAROTIDITIS CON COMPLICACIONES" = "parotiditis_complicaciones",
     "PAROTIDITIS CON COMPLICACIONES_TIA" = "parotiditis_complicaciones_tia",
     "RUBEOLA" = "rubeola",
@@ -98,23 +98,44 @@ clean_tia_column_names <- function(df) {
 }
 
 # ==========================================
-# CARGA DE DATOS PRINCIPALES (CASOS)
+# CARGA DE DATOS PRINCIPALES (CASOS) - CON DETECCIÓN AUTOMÁTICA
 # ==========================================
 message("📂 Cargando datos de casos...")
 
-if(file.exists("data/PRINCIPAL.csv")) {
-  casos <- read.csv("data/PRINCIPAL.csv",
-                    sep = ",", encoding = "UTF-8", stringsAsFactors = FALSE)
-  message("✅ PRINCIPAL.csv cargado: ", nrow(casos), " filas")
-} else {
-  # Intentar con tabulaciones
-  if(file.exists("data/PRINCIPAL.csv")) {
-    casos <- read.csv("data/PRINCIPAL.csv",
-                      sep = "\t", encoding = "UTF-8", stringsAsFactors = FALSE)
-    message("✅ PRINCIPAL.csv cargado (tabulado): ", nrow(casos), " filas")
+detectar_separador <- function(archivo) {
+  # Leer primeras líneas para detectar separador
+  primera_linea <- readLines(archivo, n = 1, warn = FALSE)
+  
+  # Contar ocurrencias de posibles separadores
+  conteo_coma <- stringr::str_count(primera_linea, ",")
+  conteo_puntoycoma <- stringr::str_count(primera_linea, ";")
+  conteo_tab <- stringr::str_count(primera_linea, "\t")
+  
+  # Decidir cuál usar (el que aparezca más veces)
+  if(conteo_puntoycoma > conteo_coma && conteo_puntoycoma > conteo_tab) {
+    return(";")
+  } else if(conteo_coma > conteo_puntoycoma && conteo_coma > conteo_tab) {
+    return(",")
+  } else if(conteo_tab > 0) {
+    return("\t")
   } else {
-    stop("❌ No se encuentra el archivo data/PRINCIPAL.csv")
+    return(",")  # Default
   }
+}
+
+if(file.exists("data/PRINCIPAL.csv")) {
+  # Detectar separador automáticamente
+  separador <- detectar_separador("data/PRINCIPAL.csv")
+  message("🔍 Separador detectado para PRINCIPAL.csv: '", separador, "'")
+  
+  casos <- read.csv("data/PRINCIPAL.csv",
+                    sep = separador, 
+                    encoding = "UTF-8", 
+                    stringsAsFactors = FALSE,
+                    check.names = FALSE)
+  message("✅ PRINCIPAL.csv cargado: ", nrow(casos), " filas, ", ncol(casos), " columnas")
+} else {
+  stop("❌ No se encuentra el archivo data/PRINCIPAL.csv")
 }
 
 # ==========================================
@@ -212,10 +233,14 @@ casos[["edad"]][is.na(casos[["edad"]])] <- 0
 # ==========================================
 # MOSTRAR VALORES ÚNICOS DE TIPO DE CASO
 # ==========================================
-message("📋 Tipos de caso encontrados: ", paste(unique(casos[["tipo_de_caso"]]), collapse = ", "))
+if("tipo_de_caso" %in% names(casos)) {
+  message("📋 Tipos de caso encontrados: ", paste(unique(casos[["tipo_de_caso"]]), collapse = ", "))
+} else {
+  message("⚠️ No se encontró columna 'tipo_de_caso'")
+}
 
 # ==========================================
-# CARGA DE TABLA TIA (RESUMEN)
+# CARGA DE TABLA TIA (RESUMEN) - CON DETECCIÓN AUTOMÁTICA
 # ==========================================
 message("📂 Cargando tabla TIA...")
 
@@ -225,26 +250,21 @@ tabla_tia <- NULL
 tia_file <- "data/TIA.csv"
 
 if (file.exists(tia_file)) {
+  # Detectar separador automáticamente
+  separador_tia <- detectar_separador(tia_file)
+  message("🔍 Separador detectado para TIA.csv: '", separador_tia, "'")
+  
   tabla_tia <- read.csv(tia_file, 
-                        sep = ",", 
+                        sep = separador_tia, 
                         encoding = "UTF-8",
                         stringsAsFactors = FALSE, 
                         check.names = FALSE)
-  
-  # También intentar con tabulación si el resultado tiene pocas columnas
-  if (ncol(tabla_tia) < 3) {
-    tabla_tia <- read.csv(tia_file, 
-                          sep = "\t", 
-                          encoding = "UTF-8",
-                          stringsAsFactors = FALSE, 
-                          check.names = FALSE)
-  }
   
   message("📋 Nombres originales TIA: ", paste(names(tabla_tia), collapse = ", "))
   
   tabla_tia <- clean_tia_column_names(tabla_tia)
   
-  message("✅ TIA cargada desde: ", tia_file, " - ", nrow(tabla_tia), " filas")
+  message("✅ TIA cargada desde: ", tia_file, " - ", nrow(tabla_tia), " filas, ", ncol(tabla_tia), " columnas")
   message("📋 Columnas TIA después de limpieza: ", paste(names(tabla_tia), collapse = ", "))
   
   # Convertir población a numérica
@@ -269,23 +289,47 @@ if (file.exists(tia_file)) {
 # ==========================================
 # LISTAS PARA FILTROS (INCLUYE DESCARTADO)
 # ==========================================
-enfermedades_lista <- sort(unique(casos[["diagnostico"]]))
-anios_disponibles  <- sort(unique(casos[["ano"]]))
-redes_lista        <- sort(unique(casos[["redes"]]))
-tipos_caso_lista   <- sort(unique(casos[["tipo_de_caso"]]))  # AHORA INCLUYE DESCARTADO
+if("diagnostico" %in% names(casos)) {
+  enfermedades_lista <- sort(unique(casos[["diagnostico"]]))
+  message("📋 Enfermedades: ", paste(enfermedades_lista, collapse = ", "))
+} else {
+  enfermedades_lista <- c("SIN DIAGNÓSTICOS")
+  message("⚠️ No se encontró columna 'diagnostico'")
+}
+
+if("ano" %in% names(casos)) {
+  anios_disponibles <- sort(unique(casos[["ano"]]))
+  message("📅 Años: ", paste(anios_disponibles, collapse = ", "))
+} else {
+  anios_disponibles <- c(2025)
+}
+
+if("redes" %in% names(casos)) {
+  redes_lista <- sort(unique(casos[["redes"]]))
+  message("📋 Redes: ", paste(redes_lista, collapse = ", "))
+} else {
+  redes_lista <- c("SIN REDES")
+}
+
+if("tipo_de_caso" %in% names(casos)) {
+  tipos_caso_lista <- sort(unique(casos[["tipo_de_caso"]]))
+  message("📋 Tipos de caso: ", paste(tipos_caso_lista, collapse = ", "))
+} else {
+  tipos_caso_lista <- c("SIN TIPOS")
+}
 
 anios_opciones <- c("Todos", anios_disponibles)
-
-message("📋 Redes: ", paste(redes_lista, collapse = ", "))
-message("📋 Tipos de caso: ", paste(tipos_caso_lista, collapse = ", "))
-message("📋 Enfermedades: ", paste(enfermedades_lista, collapse = ", "))
 
 # ==========================================
 # KPIs GLOBALES INICIALES
 # ==========================================
 total_casos       <- nrow(casos)
-total_confirmados <- sum(casos[["tipo_de_caso"]] == "CONFIRMADO", na.rm = TRUE)
-total_fallecidos  <- sum(!is.na(casos[["fecha_defuncion"]]), na.rm = TRUE)
+total_confirmados <- if("tipo_de_caso" %in% names(casos)) {
+  sum(casos[["tipo_de_caso"]] == "CONFIRMADO", na.rm = TRUE)
+} else { 0 }
+total_fallecidos  <- if("fecha_defuncion" %in% names(casos)) {
+  sum(!is.na(casos[["fecha_defuncion"]]), na.rm = TRUE)
+} else { 0 }
 total_redes       <- length(redes_lista)
 total_enfermedades <- length(enfermedades_lista)
 
@@ -299,7 +343,9 @@ meses_abrev <- c(
   "10" = "Oct", "11" = "Nov", "12" = "Dic"
 )
 
-casos$mes_abr <- meses_abrev[as.character(casos$mes)]
+if("mes" %in% names(casos)) {
+  casos$mes_abr <- meses_abrev[as.character(casos$mes)]
+}
 
 # ==========================================
 # RESUMEN FINAL DE CARGA
